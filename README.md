@@ -1,91 +1,96 @@
-# Google-Photo-Metadata-updater
-# 📷 Google Photo Metadata Tool
+📸 Google Takeout Metadata Updater
 
-This Python script helps you reapply original metadata (timestamps, GPS, etc.) to media files exported from Google Takeout using accompanying `.json` metadata files.
+A command-line tool to automatically apply metadata from your Google Takeout .json files to corresponding photo and video files using exiftool.
 
-It uses `exiftool` to write metadata back to media files (photos and videos).
+✅ Features
 
----
+🗂️ Works across multiple Takeout folders (e.g., Takeout, Takeout 2, Takeout 3, etc.)
 
-## ✅ Features
+📁 Supports all standard Google Photos exports (Photos from YYYY folders).
 
-- Automatically detects and processes folders like `Takeout`, `Takeout 2`, etc.
-- Handles `JPG`, `JPEG`, `PNG`, `MP4`, and `MOV` files.
-- Shows progress bars for each folder and the overall run.
-- Supports resume, reset, and summary report options.
-- Skips folders already processed (unless reset).
-- Logs successes and unmatched media files.
+🔍 Matches media files (.jpg, .jpeg, .png, .mp4, .mov) with their .supplemental-metadata.json files.
 
----
+💠 Uses exiftool to embed the metadata directly into the files.
 
-## 🛠️ Requirements
+📊 Shows a global progress bar at the top of the screen.
 
-- Python 3.6+
-- [`exiftool`](https://exiftool.org/) installed and available in your PATH.
+📄 Saves a detailed summary report with:
 
-You can install exiftool via:
+✅ Files successfully updated
 
-```bash
-# macOS
+❌ Files failed and why:
+
+Unsupported extension
+
+No JSON metadata found
+
+Unknown error
+
+🧠 Skips already processed folders to save time.
+
+🧼 Optionally reset progress for a fresh run.
+
+📦 Requirements
+
+Python 3.6+
+
+exiftool installed and accessible in your PATH
+
+Install exiftool (if needed):
+
+# macOS (with Homebrew)
 brew install exiftool
 
 # Ubuntu/Debian
-sudo apt update && sudo apt install libimage-exiftool-perl
-```
+sudo apt-get install libimage-exiftool-perl
 
----
+🚀 How to Use
 
-## 🚀 How to Run
+Save the script as update_metadata.py.
 
-1. **Clone this repository:**
+Run the script:
 
-```bash
-git clone https://github.com/Alex-Beheshti/Google-Photo-Metadata.git
-cd Google-Photo-Metadata
-```
+python3 update_metadata.py
 
-2. **Make the script executable (optional on Unix-like systems):**
+Follow the prompts:
 
-```bash
-chmod +x Google-Photo-Metadata.py
-```
+Enter the full path to the folder containing all your Takeout, Takeout 2, etc.
 
-3. **Run the tool:**
+Enter how many Takeout folders you have.
 
-```bash
-./Google-Photo-Metadata.py
-```
+💡 The script will:
 
-Or with Python directly:
+Scan all relevant folders.
 
-```bash
-python3 Google-Photo-Metadata.py
-```
+Update metadata on matching media files.
 
----
+Show live progress.
 
-## 📁 Sample Input Folder Structure
+Log results to metadata_update_summary.txt.
 
-```bash
-Downloads/
+📁 Files Generated
+
+metadata_update_summary.txt: Summary of matched and unmatched files, saved in the same root directory.
+
+processed_folders.log: Keeps track of which folders have been processed.
+
+🔁 Resetting Progress
+
+To rerun the tool from scratch:
+
+Delete metadata_update_summary.txt and processed_folders.log from your root directory.
+
+Rerun the script and select new inputs.
+
+🔢 Example Folder Structure
+
+/Users/yourname/Downloads/
 ├── Takeout/
 │   └── Google Photos/
-│       └── Photos from 2020/
-│           ├── IMG_20200101.jpg
-│           ├── IMG_20200101.jpg.supplemental-metadata.json
+│       ├── Photos from 2021/
+│       ├── Photos from 2022/
+│       └── ...
 ├── Takeout 2/
-    └── ...
-```
+│   └── Google Photos/
+│       └── Photos from 2023/
 
----
-
-## 📝 Notes
-
-- The script will prompt you to provide the full path to the root folder containing `Takeout`, `Takeout 2`, etc.
-- A summary report is generated at the end and saved in the folder you provide.
-
----
-
-## 📄 License
-
-MIT
