@@ -40,7 +40,7 @@ sudo apt update && sudo apt install libimage-exiftool-perl
 1. **Clone this repository:**
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/Google-Photo-Metadata.git
+git clone https://github.com/Alex-Beheshti/Google-Photo-Metadata.git
 cd Google-Photo-Metadata
 ```
 
