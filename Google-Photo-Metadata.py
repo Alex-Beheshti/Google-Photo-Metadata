@@ -1,101 +1,131 @@
 import os
+import sys
 import json
 import time
-import mimetypes
+import glob
+import shutil
 from pathlib import Path
-from tqdm import tqdm
 from datetime import datetime
-
-SUPPORTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.mov', '.mp4']
-
-RESET_LINE = "\033[K"
+import subprocess
 
 
-def extract_timestamp_from_json(json_file):
+def clear_terminal():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+
+def print_global_progress_bar(current, total):
+    width = 30
+    percent = int(current * 100 / total)
+    filled = int(percent * width / 100)
+    empty = width - filled
+    bar = '█' * filled + '░' * empty
+    print(f"🌍 Global Progress       — [{bar}] {percent:3d}% ({current}/{total} folders complete)")
+
+
+def run_exiftool(image_path, json_path):
     try:
-        with open(json_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            timestamp_str = data.get('photoTakenTime', {}).get('timestamp')
-            if timestamp_str:
-                return datetime.fromtimestamp(int(timestamp_str))
-    except Exception as e:
-        return None
-    return None
-
-
-def set_file_timestamp(file_path, timestamp):
-    try:
-        mod_time = timestamp.timestamp()
-        os.utime(file_path, (mod_time, mod_time))
-        return True
+        result = subprocess.run([
+            'exiftool',
+            f'-overwrite_original',
+            f'-json={json_path}',
+            image_path
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return result.returncode == 0
     except Exception:
         return False
 
 
-def count_json_matches(media_files, json_files):
-    match_count = 0
-    matchable_files = {}
-    json_stems = {Path(j).stem.replace(' (1)', ''): j for j in json_files}
-    for media_file in media_files:
-        stem = Path(media_file).stem
-        json_file = json_stems.get(stem)
-        if json_file:
-            matchable_files[media_file] = json_file
-            match_count += 1
-    return matchable_files, match_count
+def get_file_match_reason(image, year_dir):
+    ext = image.suffix.lower()
+    if ext not in ['.jpg', '.jpeg', '.png', '.mp4', '.mov']:
+        return 'Unsupported extension'
 
+    json_matches = list(year_dir.glob(f"{image.name}.supplemental-metadata*.json"))
+    if not json_matches:
+        return 'No JSON metadata file found'
 
-def print_global_progress(folder_idx, total_folders):
-    percent = int((folder_idx / total_folders) * 100)
-    bar_length = 30
-    filled_length = int(bar_length * folder_idx // total_folders)
-    bar = '█' * filled_length + '░' * (bar_length - filled_length)
-    print(f"\033[1A🌍 Global Progress — [{bar}]  {percent:>3}% ({folder_idx}/{total_folders} folders complete)\033[0m{RESET_LINE}")
+    return 'Unknown failure'
 
 
 def main():
-    root_dir = Path.cwd()
-    all_folders = [p for p in root_dir.iterdir() if p.is_dir()]
+    clear_terminal()
 
-    print(f"\n🧠 Scanning {len(all_folders)} folders...\n")
-    folder_match_counts = {}
+    print("📁 Google Takeout Metadata Updater")
+    root_dir = input("Enter the full path to your Takeout folders root: ").strip()
+    folder_count = int(input("How many Takeout folders do you have? ").strip())
 
-    for folder in all_folders:
-        media_files = [str(f) for f in folder.glob("*") if f.suffix.lower() in SUPPORTED_EXTENSIONS]
-        json_files = [str(f) for f in folder.glob("*.json")]
-        matches, count = count_json_matches(media_files, json_files)
-        folder_match_counts[folder] = (matches, count, len(media_files))
-        print(f"📂 {folder.name:<20} — Matchable: {count:>3} / Total Media: {len(media_files):>3}")
+    takeout_folders = [f"Takeout" if i == 0 else f"Takeout {i+1}" for i in range(folder_count)]
+    folders = []
 
-    print("\n✅ Starting metadata update...\n")
+    for t_folder in takeout_folders:
+        full_path = Path(root_dir) / t_folder / "Google Photos"
+        if full_path.exists():
+            folders += sorted(full_path.glob("Photos from*/"))
 
-    total_folders = len(folder_match_counts)
-    completed_folders = 0
+    total_folders = len(folders)
+    if total_folders == 0:
+        print("❌ No valid folders found.")
+        sys.exit(1)
 
-    for folder, (matches, _, total_media) in folder_match_counts.items():
-        success, fail = 0, 0
-        print_global_progress(completed_folders, total_folders)
-        print(f"📂 {folder.name:<20}")
+    processed_log = Path(root_dir) / "processed_folders.log"
+    report_file = Path(root_dir) / "metadata_update_summary.txt"
+    processed = set()
+    if processed_log.exists():
+        processed = set(processed_log.read_text().splitlines())
 
-        progress = tqdm(matches.items(), desc=f"📂 {folder.name:<20}", ncols=80)
+    clear_terminal()
+    print_global_progress_bar(0, total_folders)
+    print()
 
-        for media_file, json_file in progress:
-            timestamp = extract_timestamp_from_json(json_file)
-            if timestamp:
-                if set_file_timestamp(media_file, timestamp):
+    count = 0
+    with report_file.open("w") as report:
+        for year_dir in folders:
+            year_str = str(year_dir)
+            if year_str in processed:
+                count += 1
+                continue
+
+            folder_name = year_dir.name
+            print(f"\n📂 {folder_name}")
+            images = list(year_dir.glob("*.jpg")) + list(year_dir.glob("*.jpeg")) + \
+                     list(year_dir.glob("*.JPG")) + list(year_dir.glob("*.JPEG")) + \
+                     list(year_dir.glob("*.png")) + list(year_dir.glob("*.PNG")) + \
+                     list(year_dir.glob("*.mp4")) + list(year_dir.glob("*.MP4")) + \
+                     list(year_dir.glob("*.mov")) + list(year_dir.glob("*.MOV"))
+
+            success, fail = 0, 0
+            unmatched = []
+            match_summary = {'Unsupported extension': 0, 'No JSON metadata file found': 0, 'Unknown failure': 0}
+
+            for image in images:
+                matched_json = list(year_dir.glob(f"{image.name}.supplemental-metadata*.json"))
+                if matched_json and run_exiftool(str(image), str(matched_json[0])):
                     success += 1
                 else:
+                    reason = get_file_match_reason(image, year_dir)
+                    match_summary[reason] += 1
+                    unmatched.append(image.name)
                     fail += 1
-            else:
-                fail += 1
 
-        total_attempted = len(matches)
-        not_matchable = total_media - total_attempted
-        print(f"📁 {folder.name} — ✅ {success}  ❌ {fail}  ⚠️ Not matchable: {not_matchable}")
-        completed_folders += 1
+            print(f"✅ Success: {success} | ❌ Failed: {fail}")
+            report.write(f"Folder: {year_str}\n")
+            report.write(f"✅ Success: {success}\n❌ Failed: {fail}\n")
+            for reason, num in match_summary.items():
+                if num:
+                    report.write(f"   🔹 {reason}: {num}\n")
+            if unmatched:
+                report.write("   ❗ Unmatched files:\n")
+                for file in unmatched:
+                    report.write(f"     - {file}\n")
+            report.write("----------------------------------------\n")
 
-    print_global_progress(completed_folders, total_folders)
-    print("\n🎉 All folders processed!")
+            with processed_log.open("a") as plog:
+                plog.write(f"{year_str}\n")
+
+            count += 1
+            print_global_progress_bar(count, total_folders)
+
+    print("\n✅ All done! Summary saved to:", report_file)
 
 
 if __name__ == '__main__':
